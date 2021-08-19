@@ -84,6 +84,7 @@
 #include <string.h>
 
 #include "cmd.h"
+#include "console.h"
 #include "log.h"
 #include "module.h"
 
@@ -195,7 +196,7 @@ int32_t cmd_execute(char* bfr)
             break;
         } else {
             if (num_tokens >= MAX_CMD_TOKENS) {
-                printf("Too many tokens\n");
+                printc("Too many tokens\n");
                 return MOD_ERR_BAD_CMD;
             }
             // Record pointer to token and find its end.
@@ -219,7 +220,7 @@ int32_t cmd_execute(char* bfr)
     // Handle wild card commands
     if (strcmp("*", tokens[0]) == 0) {
         if (num_tokens < 2) {
-            printf("Wildcard missing command\n");
+            printc("Wildcard missing command\n");
             return MOD_ERR_BAD_CMD;
         } 
         if (strcasecmp(tokens[1], "log") == 0) {
@@ -227,11 +228,11 @@ int32_t cmd_execute(char* bfr)
             if (num_tokens == 3) {
                 log_level = log_level_int(tokens[2]);
                 if (log_level < 0) {
-                    printf("Invalid log level: %s\n", tokens[2]);
+                    printc("Invalid log level: %s\n", tokens[2]);
                     return MOD_ERR_ARG;
                 }
             } else if (num_tokens > 3) {
-                printf("Invalid arguments\n");
+                printc("Invalid arguments\n");
                 return MOD_ERR_ARG;
             }
             for (idx = 0;
@@ -242,7 +243,7 @@ int32_t cmd_execute(char* bfr)
                     if (num_tokens == 3) {
                         *ci->log_level_ptr = log_level;
                     } else {
-                        printf("Log level for %s = %s\n", ci->name,
+                        printc("Log level for %s = %s\n", ci->name,
                                log_level_str(*ci->log_level_ptr));
                     }
                 }
@@ -250,6 +251,7 @@ int32_t cmd_execute(char* bfr)
         }
         return 0;
     }
+
     // Handle top-level help.
     if (strcasecmp("help", tokens[0]) == 0 ||
         strcasecmp("?", tokens[0]) == 0) {
@@ -259,36 +261,36 @@ int32_t cmd_execute(char* bfr)
             ci = client_info[idx];
             if (ci->num_cmds == 0)
                 continue;
-            printf("%s (", ci->name);
+            printc("%s (", ci->name);
             for (idx2 = 0; idx2 < ci->num_cmds; idx2++) {
                 cci = &ci->cmds[idx2];
-                printf("%s%s", idx2 == 0 ? "" : ", ", cci->name);
+                printc("%s%s", idx2 == 0 ? "" : ", ", cci->name);
             }
             // If client provided log level, include log command.
             if (ci->log_level_ptr)
-                printf("%s%s", idx2 == 0 ? "" : ", ", "log");
+                printc("%s%s", idx2 == 0 ? "" : ", ", "log");
 
             // If client provided pm info, include pm command.
             if (ci->num_u16_pms > 0)
-                printf("%s%s", idx2 == 0 ? "" : ", ", "pm");
+                printc("%s%s", idx2 == 0 ? "" : ", ", "pm");
 
-            printf(")\n");
+            printc(")\n");
         }
-        printf("\nLog levels are: %s\n", LOG_LEVEL_NAMES);
+        printc("\nLog levels are: %s\n", LOG_LEVEL_NAMES);
         return 0;
     }
 
     // Find and execute the command.
-        for (idx = 0;
-             idx < CMD_MAX_CLIENTS && client_info[idx] != NULL;
-             idx++) {
+    for (idx = 0;
+         idx < CMD_MAX_CLIENTS && client_info[idx] != NULL;
+         idx++) {
         ci = client_info[idx];
         if (strcasecmp(tokens[0], ci->name) != 0)
             continue;
 
-        // If there is no command, create a dummy.
+        // If there is no command, treat it as help.
         if (num_tokens == 1)
-            tokens[1] = "";
+            tokens[1] = "?";
 
         // Handle help command directly.
         if (strcasecmp(tokens[1], "help") == 0 ||
@@ -296,22 +298,22 @@ int32_t cmd_execute(char* bfr)
             log_debug("Handle client help\n");
             for (idx2 = 0; idx2 < ci->num_cmds; idx2++) {
                 cci = &ci->cmds[idx2];
-                printf("%s %s: %s\n", ci->name, cci->name, cci->help);
+                printc("%s %s: %s\n", ci->name, cci->name, cci->help);
             }
 
             // If client provided log level, print help for log command.
             if (ci->log_level_ptr) {
-                printf("%s log: set or get log level, args: [level]\n",
+                printc("%s log: set or get log level, args: [level]\n",
                        ci->name);
             }
 
             // If client provided pm info, print help for pm command.
             if (ci->num_u16_pms > 0)
-                printf("%s pm: get or clear performance measurements, "
+                printc("%s pm: get or clear performance measurements, "
                        "args: [clear]\n", ci->name);
 
             if (ci->log_level_ptr)
-                printf("\nLog levels are: %s\n", LOG_LEVEL_NAMES);
+                printc("\nLog levels are: %s\n", LOG_LEVEL_NAMES);
 
             return 0;
         }
@@ -321,12 +323,12 @@ int32_t cmd_execute(char* bfr)
             log_debug("Handle command log\n");
             if (ci->log_level_ptr) {
                 if (num_tokens < 3) {
-                    printf("Log level for %s = %s\n", ci->name,
+                    printc("Log level for %s = %s\n", ci->name,
                            log_level_str(*ci->log_level_ptr));
                 } else {
                     int32_t log_level = log_level_int(tokens[2]);
                     if (log_level < 0) {
-                        printf("Invalid log level: %s\n", tokens[2]);
+                        printc("Invalid log level: %s\n", tokens[2]);
                         return MOD_ERR_ARG;
                     }
                     *ci->log_level_ptr = log_level;
@@ -341,15 +343,15 @@ int32_t cmd_execute(char* bfr)
                           (strcasecmp(tokens[2], "clear") == 0));
             if (ci->num_u16_pms > 0) {
                 if (clear)
-                    printf("Clearing performance measurements for %s\n",
+                    printc("Clearing performance measurements for %s\n",
                            ci->name);
                 else
-                    printf("%s:\n", ci->name);
+                    printc("%s:\n", ci->name);
                 for (idx2 = 0; idx2 < ci->num_u16_pms; idx2++) {
                     if (clear)
                         ci->u16_pms[idx2] = 0;
                     else
-                        printf("  %s: %d\n", ci->u16_pm_names[idx2],
+                        printc("  %s: %d\n", ci->u16_pm_names[idx2],
                                ci->u16_pms[idx2]);
                 }
             }
@@ -364,10 +366,10 @@ int32_t cmd_execute(char* bfr)
                 return 0;
             }
         }
-        printf("No such command (%s %s)\n", tokens[0], tokens[1]);
+        printc("No such command (%s %s)\n", tokens[0], tokens[1]);
         return MOD_ERR_BAD_CMD;
     }
-    printf("No such command (%s)\n", tokens[0]);
+    printc("No such command (%s)\n", tokens[0]);
     return MOD_ERR_BAD_CMD;
 }
 
@@ -403,6 +405,9 @@ int32_t cmd_execute(char* bfr)
  *   are required.
  * - ] is ignored; it can be put into the fmt string for readability,
  *   to match brackets.
+ * - + indicates that extra arguments on the command line are allowed.
+ *   This character can appear anywhere in the format string, but is normally
+ *   placed at the end.
  *
  * Examples:
  *   "up" - Requires exactly one unsigned and one pointer argument.
@@ -423,6 +428,7 @@ int32_t cmd_parse_args(int32_t argc, const char** argv, const char* fmt,
     int32_t arg_cnt = 0;
     char* endptr;
     bool opt_args = false;
+    bool allow_extra_args = false;
 
     while (*fmt) {
         if (*fmt == '[') {
@@ -434,19 +440,23 @@ int32_t cmd_parse_args(int32_t argc, const char** argv, const char* fmt,
             fmt++;
             continue;
         }
-
+        if (*fmt == '+') {
+            allow_extra_args = true;
+            fmt++;
+            continue;
+        }
         if (arg_cnt >= argc) {
             if (opt_args) {
                 return arg_cnt;
             }
-            printf("Insufficient arguments\n");
+            printc("Insufficient arguments\n");
             return MOD_ERR_BAD_CMD;
         }
 
         // These error conditions should not occur, but we check them for
         // safety.
         if (*argv == NULL || **argv == '\0') {
-            printf("Invalid empty arguments\n");
+            printc("Invalid empty arguments\n");
             return MOD_ERR_BAD_CMD;
         }
 
@@ -454,21 +464,21 @@ int32_t cmd_parse_args(int32_t argc, const char** argv, const char* fmt,
             case 'i':
                 arg_vals->val.i = strtol(*argv, &endptr, 0);
                 if (*endptr) {
-                    printf("Argument '%s' not a valid integer\n", *argv);
+                    printc("Argument '%s' not a valid integer\n", *argv);
                     return MOD_ERR_ARG;
                 }
                 break;
             case 'u':
                 arg_vals->val.u = strtoul(*argv, &endptr, 0);
                 if (*endptr) {
-                    printf("Argument '%s' not a valid unsigned integer\n", *argv);
+                    printc("Argument '%s' not a valid unsigned integer\n", *argv);
                     return MOD_ERR_ARG;
                 }
                 break;
             case 'p':
                 arg_vals->val.p = (void*)strtoul(*argv, &endptr, 16);
                 if (*endptr) {
-                    printf("Argument '%s' not a valid pointer\n", *argv);
+                    printc("Argument '%s' not a valid pointer\n", *argv);
                     return MOD_ERR_ARG;
                 }
                 break;
@@ -476,7 +486,7 @@ int32_t cmd_parse_args(int32_t argc, const char** argv, const char* fmt,
                 arg_vals->val.s = *argv;
                 break;
             default:
-                printf("Bad argument format '%c'\n", *fmt);
+                printc("Bad argument format '%c'\n", *fmt);
                 return MOD_ERR_ARG;
         }
         arg_vals->type = *fmt;
@@ -486,8 +496,8 @@ int32_t cmd_parse_args(int32_t argc, const char** argv, const char* fmt,
         fmt++;
         opt_args = false;
     }
-    if (arg_cnt < argc) {
-        printf("Too many arguments\n");
+    if (arg_cnt < argc && (!allow_extra_args)) {
+        printc("Too many arguments\n");
         return MOD_ERR_BAD_CMD;
     }
     return arg_cnt;

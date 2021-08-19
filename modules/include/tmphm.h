@@ -1,8 +1,8 @@
-#ifndef _MYMOD_H_
-#define _MYMOD_H_
+#ifndef _TMPHM_H_
+#define _TMPHM_H_
 
 /*
- * @brief Interface declaration of MYMOD module.
+ * @brief Interface declaration of tmphm module.
  *
  * See implementation file for information about this module.
  *
@@ -31,25 +31,37 @@
 
 #include <stdint.h>
 
-struct MYMOD_cfg
-{
-    // FUTURE.
+#include "config.h"
+#include "i2c.h"
+#include "module.h"
+
+enum tmphm_instance_id {
+    TMPHM_INSTANCE_1,
+
+    TMPHM_NUM_INSTANCES
 };
 
-// TODO: CHOOSE ONE SET OF FUNCTIONS BELOW BASED ON NUMBER OF INSTANCES
+struct tmphm_cfg
+{
+    enum i2c_instance_id i2c_instance_id;
+    uint32_t i2c_addr;
+    uint32_t sample_time_ms;
+    uint32_t meas_time_ms;
+};
+
+struct tmphm_meas
+{
+    int16_t temp_deg_c_x10;
+    uint16_t rh_percent_x10;
+};
 
 // Core module interface functions.
-int32_t MYMOD_get_def_cfg(struct MYMOD_cfg* cfg);
-int32_t MYMOD_init(struct MYMOD_cfg* cfg);
-int32_t MYMOD_start(void);
-int32_t MYMOD_run(void);
-
-// Core module interface functions.
-int32_t MYMOD_get_def_cfg(MYMOD_instance_id instance_id, struct MYMOD_cfg* cfg);
-int32_t MYMOD_init(MYMOD_instance_id instance_id, struct MYMOD_cfg* cfg);
-int32_t MYMOD_start(MYMOD_instance_id instance_id);
-int32_t MYMOD_run(MYMOD_instance_id instance_id);
+int32_t tmphm_get_def_cfg(enum tmphm_instance_id instance_id, struct tmphm_cfg* cfg);
+int32_t tmphm_init(enum tmphm_instance_id instance_id, struct tmphm_cfg* cfg);
+int32_t tmphm_start(enum tmphm_instance_id instance_id);
+int32_t tmphm_run(enum tmphm_instance_id instance_id);
 
 // Other APIs.
-
-#endif // _MYMOD_H_
+int32_t tmphm_get_last_meas(enum tmphm_instance_id instance_id,
+                            struct tmphm_meas* meas, uint32_t* meas_age_ms);
+#endif // _TMPHM_H_

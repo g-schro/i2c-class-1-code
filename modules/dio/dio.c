@@ -46,7 +46,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "stm32f4xx_ll_bus.h"
+
 #include "cmd.h"
+#include "console.h"
 #include "dio.h"
 #include "log.h"
 #include "module.h"
@@ -67,6 +70,11 @@ static int32_t cmd_dio_status(int32_t argc, const char** argv);
 static int32_t cmd_dio_get(int32_t argc, const char** argv);
 static int32_t cmd_dio_set(int32_t argc, const char** argv);
 
+static const char* gpio_pin_mode_to_str(uint32_t mode);
+static const char* gpio_output_type_to_str(uint32_t mode);
+static const char* gpio_pin_speed_to_str(uint32_t mode);
+static const char* gpio_pull_up_to_str(uint32_t mode);
+
 ////////////////////////////////////////////////////////////////////////////////
 // Private (static) variables
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,7 +85,7 @@ static struct cmd_cmd_info cmds[] = {
     {
         .name = "status",
         .func = cmd_dio_status,
-        .help = "Get module status, usage: dio status",
+        .help = "Get module status, usage: dio status [port <port-letter>]",
     },
     {
         .name = "get",
@@ -252,20 +260,94 @@ int32_t dio_get_num_out(void)
  *
  * @return 0 for success, else a "MOD_ERR" value. See code for details.
  *
- * Command usage: dio status
+ * Command usage: dio status [port <port-letter>]
  */
 static int32_t cmd_dio_status(int32_t argc, const char** argv)
 {
     uint32_t idx;
-    
-    printf("Inputs:\n");
+
+    if (argc == 4 && strcasecmp(argv[2], "port") == 0) {
+        const char* port_name_param = argv[3];
+        struct port_info
+        {
+            GPIO_TypeDef* port;
+            const char* name;
+            const uint32_t clk_enable_mask;
+        } ports[] = {
+#ifdef GPIOA
+            {GPIOA, "A", LL_AHB1_GRP1_PERIPH_GPIOA},
+#endif
+#ifdef GPIOB
+            {GPIOB, "B", LL_AHB1_GRP1_PERIPH_GPIOB},
+#endif
+#ifdef GPIOC
+            {GPIOC, "C", LL_AHB1_GRP1_PERIPH_GPIOC},
+#endif
+#ifdef GPIOD
+            {GPIOD, "D", LL_AHB1_GRP1_PERIPH_GPIOD},
+#endif
+#ifdef GPIOE
+            {GPIOE, "E", LL_AHB1_GRP1_PERIPH_GPIOE},
+#endif
+#ifdef GPIOF
+            {GPIOF, "F", LL_AHB1_GRP1_PERIPH_GPIOF},
+#endif
+#ifdef GPIOG
+            {GPIOG, "G", LL_AHB1_GRP1_PERIPH_GPIOG},
+#endif
+#ifdef GPIOH
+            {GPIOH, "H", LL_AHB1_GRP1_PERIPH_GPIOH},
+#endif
+#ifdef GPIOI
+            {GPIOI, "I", LL_AHB1_GRP1_PERIPH_GPIOI},
+#endif
+#ifdef GPIOJ
+            {GPIOJ, "J", LL_AHB1_GRP1_PERIPH_GPIOJ},
+#endif
+#ifdef GPIOK
+            {GPIOK, "K", LL_AHB1_GRP1_PERIPH_GPIOK},
+#endif
+        };
+        for (idx = 0; idx < ARRAY_SIZE(ports); idx++) {
+            struct port_info* port = &ports[idx];
+            uint32_t pin_idx;
+            if (strcasecmp(port->name, port_name_param) != 0)
+                continue;
+            printc("Port %s:", port->name);
+            if (!LL_AHB1_GRP1_IsEnabledClock(port->clk_enable_mask)) {
+                printc(" Clock not enabled\n");
+                continue;
+            }
+            printc("\nPin In Out Mode AF OT PS PP\n--- -- --- ---- -- -- -- --\n");
+            for (pin_idx = 0; pin_idx < 16; pin_idx++) {
+                printc("%3lu %2lu %3lu %4s %2lu %2s %2s %2s\n",
+                       pin_idx, 
+                       LL_GPIO_IsInputPinSet(port->port, 1 << pin_idx),
+                       LL_GPIO_IsOutputPinSet(port->port, 1 << pin_idx),
+                       gpio_pin_mode_to_str(LL_GPIO_GetPinMode(port->port, 1 << pin_idx)),
+                       pin_idx <= 7 ?
+                       LL_GPIO_GetAFPin_0_7(port->port, 1 << pin_idx) :
+                       LL_GPIO_GetAFPin_8_15(port->port, 1 << pin_idx),
+                       gpio_output_type_to_str(LL_GPIO_GetPinOutputType(port->port, 1 << pin_idx)),
+                       gpio_pin_speed_to_str(LL_GPIO_GetPinSpeed(port->port, 1 << pin_idx)),
+                       gpio_pull_up_to_str(LL_GPIO_GetPinPull(port->port, 1 << pin_idx)));
+            }
+            break;
+        }
+        return 0;
+    }
+    else if (argc != 2) {
+        printc("Invalid arguments\n");
+        return MOD_ERR_ARG;
+    }
+    printc("Inputs:\n");
     for (idx = 0; idx < cfg->num_inputs; idx++)
-        printf("  %2lu: %s = %ld\n", idx, cfg->inputs[idx].name, dio_get(idx));
+        printc("  %2lu: %s = %ld\n", idx, cfg->inputs[idx].name, dio_get(idx));
     
 
-    printf("Outputs:\n");
+    printc("Outputs:\n");
     for (idx = 0; idx < cfg->num_outputs; idx++)
-        printf("  %2lu: %s = %ld\n", idx, cfg->outputs[idx].name,
+        printc("  %2lu: %s = %ld\n", idx, cfg->outputs[idx].name,
                dio_get_out(idx));
 
     return 0;
@@ -293,7 +375,7 @@ static int32_t cmd_dio_get(int32_t argc, const char** argv)
         if (strcasecmp(arg_vals[0].val.s, cfg->inputs[idx].name) == 0)
             break;
     if (idx < cfg->num_inputs) {
-        printf("%s = %ld\n", cfg->inputs[idx].name, dio_get(idx));
+        printc("%s = %ld\n", cfg->inputs[idx].name, dio_get(idx));
         return 0;
     }
 
@@ -301,10 +383,10 @@ static int32_t cmd_dio_get(int32_t argc, const char** argv)
         if (strcasecmp(arg_vals[0].val.s, cfg->outputs[idx].name) == 0)
             break;
     if (idx < cfg->num_outputs) {
-        printf("%s %ld\n", cfg->outputs[idx].name, dio_get_out(idx));
+        printc("%s %ld\n", cfg->outputs[idx].name, dio_get_out(idx));
         return 0;
     }
-    printf("Invalid dio input/output name '%s'\n", arg_vals[0].val.s);
+    printc("Invalid dio input/output name '%s'\n", arg_vals[0].val.s);
     return MOD_ERR_ARG;
 }
 
@@ -331,14 +413,113 @@ static int32_t cmd_dio_set(int32_t argc, const char** argv)
         if (strcasecmp(arg_vals[0].val.s, cfg->outputs[idx].name) == 0)
             break;
     if (idx >= cfg->num_outputs) {
-        printf("Invalid dio name '%s'\n", arg_vals[0].val.s);
+        printc("Invalid dio name '%s'\n", arg_vals[0].val.s);
         return MOD_ERR_ARG;
     }
 
     value = arg_vals[1].val.u;
     if (value != 0 && value != 1) {
-        printf("Invalid value '%s'\n", argv[3]);
+        printc("Invalid value '%s'\n", argv[3]);
         return MOD_ERR_ARG;
     }
     return dio_set(idx, value);
+}
+
+/*
+ * @brief Convert GPIO pin mode bit-field to a string.
+ *
+ * @param[in] mode Bit-field value.
+ *
+ * @return String form of bit-field.
+ */
+static const char* gpio_pin_mode_to_str(uint32_t mode)
+{
+    const char* str = "?  ";
+    switch (mode) {
+        case LL_GPIO_MODE_INPUT:
+            str = "In ";
+            break;
+        case LL_GPIO_MODE_OUTPUT:
+            str = "Out";
+            break;
+        case LL_GPIO_MODE_ALTERNATE:
+            str = "Alt";
+            break;
+        case LL_GPIO_MODE_ANALOG:
+            str = "Ana";
+            break;
+    }
+    return str;
+}
+
+/*
+ * @brief Convert GPIO output type bit-field to a string.
+ *
+ * @param[in] mode Bit-field value.
+ *
+ * @return String form of bit-field.
+ */
+static const char* gpio_output_type_to_str(uint32_t mode)
+{
+    const char* str = "? ";
+    switch (mode) {
+        case LL_GPIO_OUTPUT_PUSHPULL:
+            str = "PP";
+            break;
+        case LL_GPIO_OUTPUT_OPENDRAIN:
+            str = "OD";
+            break;
+    }
+    return str;
+}
+
+/*
+ * @brief Convert GPIO pin speed bit-field to a string.
+ *
+ * @param[in] mode Bit-field value.
+ *
+ * @return String form of bit-field.
+ */
+static const char* gpio_pin_speed_to_str(uint32_t mode)
+{
+    const char* str = "? ";
+    switch (mode) {
+        case LL_GPIO_SPEED_FREQ_LOW:
+            str = "Lo";
+            break;
+        case LL_GPIO_SPEED_FREQ_MEDIUM:
+            str = "Me";
+            break;
+        case LL_GPIO_SPEED_FREQ_HIGH:
+            str = "Hi";
+            break;
+        case LL_GPIO_SPEED_FREQ_VERY_HIGH:
+            str = "VH";
+            break;
+    }
+    return str;
+}
+
+/*
+ * @brief Convert GPIO pull up bit-field to a string.
+ *
+ * @param[in] mode Bit-field value.
+ *
+ * @return String form of bit-field.
+ */
+static const char* gpio_pull_up_to_str(uint32_t mode)
+{
+    const char* str = "? ";
+    switch (mode) {
+        case LL_GPIO_PULL_NO:
+            str = "No";
+            break;
+        case LL_GPIO_PULL_UP:
+            str = "Up";
+            break;
+        case LL_GPIO_PULL_DOWN:
+            str = "Dn";
+            break;
+    }
+    return str;
 }

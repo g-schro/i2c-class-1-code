@@ -38,6 +38,7 @@
 #include <string.h>
 
 #include "cmd.h"
+#include "console.h"
 #include "log.h"
 #include "module.h"
 
@@ -154,33 +155,33 @@ static int32_t cmd_mem_read(int32_t argc, const char** argv)
             items_per_line = 4;
             break;
         default:
-            printf("Invalid data unit size %lu\n", unit_size);
+            printc("Invalid data unit size %lu\n", unit_size);
             return MOD_ERR_ARG;
     }
     line_item_ctr = 0;
     while (count-- > 0) {
         if (line_item_ctr == 0)
-            printf("%08x:", (unsigned)arg_vals[0].val.p);
+            printc("%08x:", (unsigned)arg_vals[0].val.p);
         switch (unit_size) {
             case 1:
-                printf(" %02x", *arg_vals[0].val.p8);
+                printc(" %02x", *arg_vals[0].val.p8);
                 break;
             case 2:
-                printf(" %04x", *arg_vals[0].val.p16);
+                printc(" %04x", *arg_vals[0].val.p16);
                 break;
             case 4:
-                printf(" %08lx", *arg_vals[0].val.p32);
+                printc(" %08lx", *arg_vals[0].val.p32);
                 break;
         }
         arg_vals[0].val.p8 += unit_size;
         if (++line_item_ctr == items_per_line)
         {
-            printf("\n");
+            printc("\n");
             line_item_ctr = 0;
         }
     }
     if (line_item_ctr != 0)
-        printf("\n");
+        printc("\n");
     return 0;
 }
 
@@ -207,7 +208,7 @@ static int32_t cmd_mem_write(int32_t argc, const char** argv)
         return num_args;
     unit_size = arg_vals[1].val.u;
     if (unit_size != 1 && unit_size != 2 && unit_size != 4) {
-        printf("Invalid data unit_size %lu\n", unit_size);
+        printc("Invalid data unit_size %lu\n", unit_size);
         return MOD_ERR_ARG;
     }
     val_arg_idx = 2;

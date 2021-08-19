@@ -55,6 +55,7 @@
 #include "stm32f4xx_ll_cortex.h"
 
 #include "cmd.h"
+#include "console.h"
 #include "log.h"
 #include "module.h"
 #include "tmr.h"
@@ -417,16 +418,16 @@ static int32_t cmd_tmr_status(int32_t argc, const char** argv)
     uint32_t idx;
     uint32_t now_ms = tmr_get_ms();
 
-    printf("SysTick->CTRL=0x%08lx\n", SysTick->CTRL); // TODO REMOVE
-    printf("Current millisecond tmr=%lu\n\n", now_ms);
+    printc("SysTick->CTRL=0x%08lx\n", SysTick->CTRL); // TODO REMOVE
+    printc("Current millisecond tmr=%lu\n\n", now_ms);
 
-    printf("ID   Period   Start time Time left  CB User data  State\n");
-    printf("-- ---------- ---------- ---------- -- ---------- ------\n");
+    printc("ID   Period   Start time Time left  CB User data  State\n");
+    printc("-- ---------- ---------- ---------- -- ---------- ------\n");
     for (idx = 0; idx < TMR_NUM_INST; idx++) {
         struct tmr_inst_info* ti = &tmrs[idx];
         if (ti->state == TMR_UNUSED)
             continue;
-        printf("%2lu %10lu %10lu %10lu %2s %10lu %s\n", idx, ti->period_ms,
+        printc("%2lu %10lu %10lu %10lu %2s %10lu %s\n", idx, ti->period_ms,
                ti->start_time,
                ti->state == TMR_RUNNING ? 
                ti->period_ms - (now_ms - ti->start_time) : 0,
@@ -456,7 +457,7 @@ static int32_t cmd_tmr_test(int32_t argc, const char** argv)
 
     // Handle help case.
     if (argc == 2) {
-        printf("Test operations and param(s) are as follows:\n"
+        printc("Test operations and param(s) are as follows:\n"
                "  Get a non-callback tmr, usage: tmr test get <ms>\n"
                "  Get a callback tmr, usage: tmr test get_cb <ms> <cb-user-data>\n"
                "  Start a tmr, usage: tmr test start <tmr-id> <ms>\n"
@@ -466,7 +467,7 @@ static int32_t cmd_tmr_test(int32_t argc, const char** argv)
     }
 
     if (argc < 4) {
-        printf("Insufficent arguments\n");
+        printc("Insufficent arguments\n");
         return MOD_ERR_BAD_CMD;
     }
 
@@ -498,10 +499,10 @@ static int32_t cmd_tmr_test(int32_t argc, const char** argv)
         // command: tmr test is_expired <id>
         rc = tmr_inst_is_expired(param1);
     } else {
-        printf("Invalid operation '%s'\n", argv[2]);
+        printc("Invalid operation '%s'\n", argv[2]);
         return MOD_ERR_BAD_CMD;
     }
-    printf("Operation returns %ld\n", rc);
+    printc("Operation returns %ld\n", rc);
     return 0;
 }
 

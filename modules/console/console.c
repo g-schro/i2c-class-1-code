@@ -37,11 +37,13 @@
 
 #include <ctype.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "cmd.h"
+#include "config.h"
 #include "console.h"
 #include "log.h"
 #include "module.h"
@@ -50,6 +52,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 // Common macros
 ////////////////////////////////////////////////////////////////////////////////
+
+#define CONSOLE_DFLT_TTYS_INSTANCE \
+    CONCAT_X_TOKEN(TTYS_INSTANCE_UART, CONFIG_CONSOLE_DFLT_TTYS_INSTANCE)
 
 #define PROMPT "> "
 
@@ -65,7 +70,6 @@ struct console_state {
     uint16_t num_cmd_bfr_chars;
     bool first_run_done;
 };
-
 ////////////////////////////////////////////////////////////////////////////////
 // Private (static) function declarations
 ////////////////////////////////////////////////////////////////////////////////
@@ -74,7 +78,12 @@ struct console_state {
 // Private (static) variables
 ////////////////////////////////////////////////////////////////////////////////
 
-static struct console_state state;
+// We initialze the default ttys instance so we can get console output
+// very early after boot.
+
+static struct console_state state = {
+    .cfg.ttys_instance_id = CONSOLE_DFLT_TTYS_INSTANCE,
+};
 
 static int32_t log_level = LOG_DEFAULT;
 
@@ -99,7 +108,7 @@ int32_t console_get_def_cfg(struct console_cfg* cfg)
         return MOD_ERR_ARG;
 
     memset(cfg, 0, sizeof(*cfg));
-    cfg->ttys_instance_id = TTYS_INSTANCE_UART2;
+    cfg->ttys_instance_id = CONSOLE_DFLT_TTYS_INSTANCE;
     return 0;
 }
 
@@ -139,7 +148,7 @@ int32_t console_run(void)
     char c;
     if (!state.first_run_done) {
         state.first_run_done = true;
-        printf("%s", PROMPT);
+        printc("%s", PROMPT);
     }
             
     while (ttys_getc(state.cfg.ttys_instance_id, &c)) {
@@ -147,10 +156,10 @@ int32_t console_run(void)
         // Handle processing completed command line.
         if (c == '\n' || c == '\r') {
             state.cmd_bfr[state.num_cmd_bfr_chars] = '\0';
-            printf("\n");
+            printc("\n");
             cmd_execute(state.cmd_bfr);
             state.num_cmd_bfr_chars = 0;
-            printf("%s", PROMPT);
+            printc("%s", PROMPT);
             continue;
         }
 
@@ -158,7 +167,7 @@ int32_t console_run(void)
         if (c == '\b' || c == '\x7f') {
             if (state.num_cmd_bfr_chars > 0) {
                 // Overwrite last character with a blank.
-                printf("\b \b");
+                printc("\b \b");
                 state.num_cmd_bfr_chars--;
             }
 
@@ -168,7 +177,7 @@ int32_t console_run(void)
         // Handle logging on/off toggle.
         if (c == LOG_TOGGLE_CHAR) {
             log_toggle_active();
-            printf("\n<Logging %s>\n", log_is_active() ? "on" : "off");
+            printc("\n<Logging %s>\n", log_is_active() ? "on" : "off");
             continue;
         }
 
@@ -176,10 +185,10 @@ int32_t console_run(void)
         if (isprint(c)) {
             if (state.num_cmd_bfr_chars < (CONSOLE_CMD_BFR_SIZE-1)) {
                 state.cmd_bfr[state.num_cmd_bfr_chars++] = c;
-                printf("%c", c);
+                printc("%c", c);
             } else {
                 // No space in buffer for the character, so ring the bell.
-                printf("\a");
+                printc("\a");
             }
             continue;
         }
@@ -188,7 +197,62 @@ int32_t console_run(void)
     return 0;
 }            
 
+/*
+ * @brief A printf for the console, safe to use in interrupts.
+ *
+ * @param[in] fmt Format string as in printf.
+ *
+ * @return Number of characters written as in printf.
+ */
+int printc(const char* fmt, ...)
+{
+    va_list args;
+    char buf[CONFIG_CONSOLE_PRINT_BUF_SIZE];
+    int rc;
+    int idx;
+
+    va_start(args, fmt);
+    rc = vsnprintf(buf, CONFIG_CONSOLE_PRINT_BUF_SIZE, fmt, args);
+    va_end(args);
+    for (idx = 0; idx < rc; idx++) {
+        ttys_putc(state.cfg.ttys_instance_id, buf[idx]);
+        if (buf[idx] == '\0')
+            break;
+        if (buf[idx] == '\n') 
+            ttys_putc(state.cfg.ttys_instance_id, '\r');
+    }
+    if (rc >= CONFIG_CONSOLE_PRINT_BUF_SIZE)
+        printc("[!]\n");
+    return rc;
+}
+
+/*
+ * @brief A vprintf for the console, safe to use in interrupts.
+ *
+ * @param[in] fmt Format string as in vprintf.
+ * @param[in] args Format arguments as in vprintf.
+ *
+ * @return Number of characters written as in vprintf.
+ */
+int vprintc(const char* fmt, va_list args)
+{
+    char buf[CONFIG_CONSOLE_PRINT_BUF_SIZE];
+    int rc;
+    int idx;
+
+    rc = vsnprintf(buf, CONFIG_CONSOLE_PRINT_BUF_SIZE, fmt, args);
+    for (idx = 0; idx < rc; idx++) {
+        ttys_putc(state.cfg.ttys_instance_id, buf[idx]);
+        if (buf[idx] == '\0')
+            break;
+        if (buf[idx] == '\n') 
+            ttys_putc(state.cfg.ttys_instance_id, '\r');
+    }
+    if (rc >= CONFIG_CONSOLE_PRINT_BUF_SIZE)
+        printc("[!]\n");
+    return rc;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Private (static) functions
 ////////////////////////////////////////////////////////////////////////////////
-

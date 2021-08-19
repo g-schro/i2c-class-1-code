@@ -29,6 +29,8 @@
 
 #include <limits.h>
 
+#include "stm32f4xx_ll_cortex.h"
+
 // Error codes.
 #define MOD_ERR_ARG          -1
 #define MOD_ERR_RESOURCE     -2
@@ -36,6 +38,10 @@
 #define MOD_ERR_BAD_CMD      -4
 #define MOD_ERR_BUF_OVERRUN  -5
 #define MOD_ERR_BAD_INSTANCE -6
+#define MOD_ERR_PERIPH       -7
+#define MOD_ERR_NOT_RESERVED -8
+#define MOD_ERR_OP_IN_PROG   -9
+#define MOD_ERR_UNAVAIL      -10
 
 // Get size of an array.
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -45,5 +51,21 @@
 
 // Clamp a numeric value between a lower and upper limit, inclusive.
 #define CLAMP(a, low, high) ((a) <= (low) ? (low) : ((a) > (high) ? (high) : (a)))
+
+// Concat tokens
+#define CONCAT_TOKEN(a, b) a ## b
+
+// Concat tokens after expansion
+#define CONCAT_X_TOKEN(a, b) CONCAT_TOKEN(a, b)
+
+#define CRIT_START() __disable_irq()
+#define CRIT_END() __disable_irq()
+
+#define CRIT_STATE_VAR uint32_t _primask_save
+#define CRIT_BEGIN_NEST()                                   \
+    do {                                                    \
+        _primask_save = __get_PRIMASK(); __set_PRIMASK(1);  \
+    } while (0)
+#define CRIT_END_NEST() do { __set_PRIMASK(_primask_save); } while (0)
 
 #endif // _MODDEFS_H_

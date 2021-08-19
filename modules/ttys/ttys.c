@@ -13,6 +13,9 @@
  * The following console commands are provided:
  * > ttys status
  * > ttys test
+ * > ttys pm
+ * > ttys log
+ * 
  * See code for details.
  *
  * This library makes use of the STMicroelectronics Low Level (LL) device
@@ -20,7 +23,7 @@
  *
  * Currently, this module does not perform hardware initialization of the UART
  * and associated hardware (e.g. GPIO), except for the interrupt controller (see
- * below). It is expected that the driver library has been used for
+ * below). It is expected that the LL driver library has been used for
  * initilazation (e.g. via generated IDE code). This avoids having to deal with
  * the issue of inconsistent driver libraries among MCUs.
  *
@@ -66,6 +69,7 @@
 #include "stm32f4xx_ll_usart.h"
 
 #include "cmd.h"
+#include "console.h"
 #include "log.h"
 #include "module.h"
 #include "tmr.h"
@@ -326,12 +330,14 @@ int32_t ttys_putc(enum ttys_instance_id instance_id, char c)
 {
     struct ttys_state* st;
     uint16_t next_put_idx;
+    CRIT_STATE_VAR;
 
     if (instance_id >= TTYS_NUM_INSTANCES)
         return MOD_ERR_BAD_INSTANCE;
     st = &ttys_states[instance_id];
 
     // Calculate the new TX buffer put index
+    CRIT_BEGIN_NEST();
     next_put_idx = st->tx_buf_put_idx + 1;
     if (next_put_idx >= TTYS_TX_BUF_SIZE)
         next_put_idx = 0;
@@ -339,6 +345,7 @@ int32_t ttys_putc(enum ttys_instance_id instance_id, char c)
     // If buffer is full, then return error.
     while (next_put_idx == st->tx_buf_get_idx) {
         INC_SAT_U16(cnts_u16[CNT_TX_BUF_OVERRUN]);
+        CRIT_END_NEST();
         return MOD_ERR_BUF_OVERRUN;
     }
 
@@ -348,10 +355,9 @@ int32_t ttys_putc(enum ttys_instance_id instance_id, char c)
 
     // Ensure the TX interrupt is enabled.
     if (ttys_states[instance_id].uart_reg_base != NULL) {
-        __disable_irq();
         LL_USART_EnableIT_TXE(st->uart_reg_base);
-        __enable_irq();
     }
+    CRIT_END_NEST();
     return 0;
 }
 
@@ -367,6 +373,7 @@ int32_t ttys_getc(enum ttys_instance_id instance_id, char* c)
 {
     struct ttys_state* st;
     int32_t next_get_idx;
+    CRIT_STATE_VAR;
 
     if (instance_id >= TTYS_NUM_INSTANCES)
         return MOD_ERR_BAD_INSTANCE;
@@ -374,8 +381,11 @@ int32_t ttys_getc(enum ttys_instance_id instance_id, char* c)
     st = &ttys_states[instance_id];
 
     // Check if buffer is empty.
-    if (st->rx_buf_get_idx == st->rx_buf_put_idx)
+    CRIT_BEGIN_NEST();
+    if (st->rx_buf_get_idx == st->rx_buf_put_idx) {
+        CRIT_END_NEST();
         return 0;
+    }
 
     // Get a character and advance get index.
     next_get_idx = st->rx_buf_get_idx + 1;
@@ -383,6 +393,7 @@ int32_t ttys_getc(enum ttys_instance_id instance_id, char* c)
         next_get_idx = 0;
     *c = st->rx_buf[st->rx_buf_get_idx];
     st->rx_buf_get_idx = next_get_idx;
+    CRIT_END_NEST();
     return 1;
 }
 
@@ -454,6 +465,7 @@ static void ttys_interrupt(enum ttys_instance_id instance_id,
 {
     struct ttys_state* st;
     uint8_t sr;
+    CRIT_STATE_VAR;
 
     if (instance_id >= TTYS_NUM_INSTANCES)
         return;
@@ -469,16 +481,16 @@ static void ttys_interrupt(enum ttys_instance_id instance_id,
 
     sr = st->uart_reg_base->SR;
 
+    CRIT_BEGIN_NEST();
     if (sr & LL_USART_SR_RXNE) {
         // Got an incoming character.
         uint16_t next_rx_put_idx = st->rx_buf_put_idx + 1;
-        char rx_data = st->uart_reg_base->DR;
         if (next_rx_put_idx >= TTYS_RX_BUF_SIZE)
             next_rx_put_idx = 0;
         if (next_rx_put_idx == st->rx_buf_get_idx) {
             INC_SAT_U16(cnts_u16[CNT_RX_BUF_OVERRUN]);
         } else {
-            st->rx_buf[st->rx_buf_put_idx] = rx_data;
+            st->rx_buf[st->rx_buf_put_idx] = st->uart_reg_base->DR;
             st->rx_buf_put_idx = next_rx_put_idx;
         }
     }
@@ -511,6 +523,7 @@ static void ttys_interrupt(enum ttys_instance_id instance_id,
         if (sr & LL_USART_SR_PE)
             INC_SAT_U16(cnts_u16[CNT_RX_UART_PE]);
     }
+    CRIT_END_NEST();
 }
 
 /*
@@ -529,13 +542,13 @@ static int32_t cmd_ttys_status(int32_t argc, const char** argv)
 
     for (instance_id = 0; instance_id < TTYS_NUM_INSTANCES; instance_id++) {
         struct ttys_state* st = &ttys_states[instance_id];
-        printf("Instance %d:\n", instance_id);
+        printc("Instance %d:\n", instance_id);
         if (st->uart_reg_base == NULL) {
-            printf("  NULL\n");
+            printc("  NULL\n");
         } else {
-            printf("  TX buffer: get_idx=%u put_idx=%u\n",
+            printc("  TX buffer: get_idx=%u put_idx=%u\n",
                    st->tx_buf_get_idx, st->tx_buf_put_idx);
-            printf("  RX buffer: get_idx=%u put_idx=%d\n",
+            printc("  RX buffer: get_idx=%u put_idx=%d\n",
                    st->rx_buf_get_idx, st->rx_buf_put_idx);
         }
     }
@@ -565,13 +578,12 @@ static int32_t cmd_ttys_test(int32_t argc, const char** argv)
 
     // Handle help case.
     if (argc == 2) {
-        printf("Test operations and param(s) are as follows:\n"
+        printc("Test operations and param(s) are as follows:\n"
                "  Write test msg using fprintf, usage: ttys test fprintf <instance-id>\n"
-               "  Write test msg using write, usage: ttys test write <instance-id>\n"
-               "  Read chars for 5 seconds using fgetc, usage: ttys test fgetc <instance-id>\n"
+               "  Write test msg using write, usage: ttys test write <instance-id>\n");
+        printc("  Read chars for 5 seconds using fgetc, usage: ttys test fgetc <instance-id>\n"
                "  Read chars for 5 seconds using read, usage: ttys test read <instance-id>\n"
-               "\nWARNING! Read tests block!\n"
-            );
+               "\nWARNING! Read tests block!\n");
         return 0;
     }
 
@@ -585,7 +597,7 @@ static int32_t cmd_ttys_test(int32_t argc, const char** argv)
         strcasecmp(argv[2], "fgetc") == 0) {
         f = ttys_get_stream((enum ttys_instance_id)param);
         if (f == NULL) {
-            printf("Can't get FILE stream for instance.\n");
+            printc("Can't get FILE stream for instance.\n");
             return MOD_ERR_RESOURCE;
         }
     }
@@ -593,11 +605,11 @@ static int32_t cmd_ttys_test(int32_t argc, const char** argv)
         strcasecmp(argv[2], "read") == 0) {
         fd = ttys_get_fd((enum ttys_instance_id)param);
         if (fd < 0) {
-            printf("Can't get fd for instance result=%d.\n", fd);
+            printc("Can't get fd for instance result=%d.\n", fd);
             return MOD_ERR_RESOURCE;
         }
     } else {
-        printf("Invalid operation '%s'\n", argv[2]);
+        printc("Invalid operation '%s'\n", argv[2]);
         return MOD_ERR_BAD_CMD;
     }
 
@@ -605,20 +617,20 @@ static int32_t cmd_ttys_test(int32_t argc, const char** argv)
         // command: ttys test fprintf <instance-id>
         rc = fprintf(f, test_msg);
         fflush(f);
-        printf("fprintf to FILE %p returns %d errno=%d\n", f, rc, errno);
+        printc("fprintf to FILE %p returns %d errno=%d\n", f, rc, errno);
     } else if (strcasecmp(argv[2], "write") == 0) {
         // command: ttys test write <instance-id>
         rc = write(fd, test_msg, test_msg_len);
-        printf("write to fd %d returns %d errno=%d\n", fd, rc, errno);
+        printc("write to fd %d returns %d errno=%d\n", fd, rc, errno);
     } else if (strcasecmp(argv[2], "fgetc") == 0) {
         // command: ttys test fgetc <instance-id>
         start_ms = tmr_get_ms();
         while (tmr_get_ms() - start_ms < 5000) {
             rc = fgetc(f);
             if (rc > 0)
-                printf("Got char 0x%02x\n", rc);
+                printc("Got char 0x%02x\n", rc);
             else if (rc != -1 || errno != EAGAIN) {
-                printf("Unexpected result rc=%d errno=%d\n", rc, errno);
+                printc("Unexpected result rc=%d errno=%d\n", rc, errno);
                 break;
             }
         }
@@ -629,9 +641,9 @@ static int32_t cmd_ttys_test(int32_t argc, const char** argv)
             char c;
             rc = read(fd, &c, 1);
             if (rc == 1)
-                printf("Got char 0x%02x\n", c);
+                printc("Got char 0x%02x\n", c);
             else if (rc != -1 || errno != EWOULDBLOCK) {
-                printf("Unexpected result rc=%d errno=%d\n", rc, errno);
+                printc("Unexpected result rc=%d errno=%d\n", rc, errno);
                 break;
             }
         }

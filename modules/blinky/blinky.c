@@ -43,6 +43,7 @@
 #include "stm32f4xx_ll_cortex.h"
 
 #include "cmd.h"
+#include "console.h"
 #include "dio.h"
 #include "log.h"
 #include "module.h"
@@ -283,9 +284,9 @@ int32_t blinky_set_sep_period(uint32_t period_ms)
  */
 static int32_t cmd_blinky_status(int32_t argc, const char** argv)
 {
-    printf("state=%d blink_counter=%lu tmr_id=%ld\n",
+    printc("state=%d blink_counter=%lu tmr_id=%ld\n",
            state.state, state.blink_counter, state.tmr_id);
-    printf("code-num-blinks=%lu code-period-ms=%lu sep-num-blinks=%lu sep-perioid-ms=%lu\n",
+    printc("code-num-blinks=%lu code-period-ms=%lu sep-num-blinks=%lu sep-perioid-ms=%lu\n",
            state.cfg.code_num_blinks, state.cfg.code_period_ms,
            state.cfg.sep_num_blinks, state.cfg.sep_period_ms);
     return 0;

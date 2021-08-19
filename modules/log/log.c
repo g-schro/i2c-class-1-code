@@ -40,6 +40,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include "console.h"
+#include "module.h"
 #include "tmr.h"
 #include "log.h"
 
@@ -101,9 +103,9 @@ void log_printf(const char* fmt, ...)
     va_list args;
     uint32_t ms = tmr_get_ms();
 
-    printf("%lu.%03lu ", ms / 1000U, ms % 1000U);
+    printc("%lu.%03lu ", ms / 1000U, ms % 1000U);
     va_start(args, fmt);
-    vprintf(fmt, args);
+    vprintc(fmt, args);
     va_end(args);
 }
 

@@ -36,9 +36,11 @@
 #include "console.h"
 #include "dio.h"
 #include "gps_gtu7.h"
+#include "i2c.h"
 #include "log.h"
 #include "mem.h"
 #include "module.h"
+#include "tmphm.h"
 #include "ttys.h"
 #include "stat.h"
 #include "tmr.h"
@@ -120,8 +122,8 @@ static struct dio_in_info d_inputs[DIN_NUM] = {
     {
         // GPS PPS, connected to PB2 (CN10, pin 22).
         .name = "PPS",
-        .port = DIO_PORT_A,
-        .pin = DIO_PIN_8,
+        .port = DIO_PORT_B,
+        .pin = DIO_PIN_3,
         .pull = DIO_PULL_NO,
     }
 };
@@ -167,6 +169,7 @@ void app_main(void)
     int32_t result;;
     struct console_cfg console_cfg;
     struct gps_cfg gps_cfg;
+    struct i2c_cfg i2c_cfg;
     struct ttys_cfg ttys_cfg;
     struct blinky_cfg blinky_cfg = {
         .dout_idx = DOUT_LED_2,
@@ -175,14 +178,14 @@ void app_main(void)
         .sep_num_blinks = 5,
         .sep_period_ms = 200,
     };
+    struct tmphm_cfg tmphm_cfg;
 
     //
     // Invoke the init API on modules the use it.
     //
 
     setvbuf(stdout, NULL, _IONBF, 0);
-    // Before ttys is init-ed we have to put in \r explicitly.
-    printf("\n\rInit: Init modules\n\r");
+    printc("\nInit: Init modules\n");
     result = ttys_get_def_cfg(TTYS_INSTANCE_UART2, &ttys_cfg);
     if (result < 0) {
         log_error("ttys_get_def_cfg error %d\n", result);
@@ -255,11 +258,36 @@ void app_main(void)
         INC_SAT_U16(cnts_u16[CNT_INIT_ERR]);
     }
 
+    result = i2c_get_def_cfg(I2C_INSTANCE_3, &i2c_cfg);
+    if (result < 0) {
+        log_error("i2c_get_def_cfg error %d\n", result);
+        INC_SAT_U16(cnts_u16[CNT_INIT_ERR]);
+    } else {
+        result = i2c_init(I2C_INSTANCE_3, &i2c_cfg);
+        if (result < 0) {
+            log_error("i2c_init error %d\n", result);
+            INC_SAT_U16(cnts_u16[CNT_INIT_ERR]);
+        }
+    }
+
+    result = tmphm_get_def_cfg(TMPHM_INSTANCE_1, &tmphm_cfg);
+    if (result < 0) {
+        log_error("tmphm_get_def_cfg error %d\n", result);
+        INC_SAT_U16(cnts_u16[CNT_INIT_ERR]);
+    } else {
+        tmphm_cfg.i2c_instance_id = I2C_INSTANCE_3;
+        result = tmphm_init(TMPHM_INSTANCE_1, &tmphm_cfg);
+        if (result < 0) {
+            log_error("tmphm_init error %d\n", result);
+            INC_SAT_U16(cnts_u16[CNT_INIT_ERR]);
+        }
+    }
+
     //
     // Invoke the start API on modules the use it.
     //
 
-    printf("Init: Start modules\n");
+    printc("Init: Start modules\n");
 
     result = ttys_start(TTYS_INSTANCE_UART2);
     if (result < 0) {
@@ -303,6 +331,18 @@ void app_main(void)
         INC_SAT_U16(cnts_u16[CNT_START_ERR]);
     }
 
+    result = i2c_start(I2C_INSTANCE_3);
+    if (result < 0) {
+        log_error("i2c_start 3 error %d\n", result);
+        INC_SAT_U16(cnts_u16[CNT_START_ERR]);
+    }
+
+    result = tmphm_start(TMPHM_INSTANCE_1);
+    if (result < 0) {
+        log_error("tmphm_start 1 error %d\n", result);
+        INC_SAT_U16(cnts_u16[CNT_START_ERR]);
+    }
+
     result = cmd_register(&cmd_info);
     if (result < 0) {
         log_error("main: cmd_register error %d\n", result);
@@ -315,7 +355,7 @@ void app_main(void)
     // In the super loop invoke the run API on modules the use it.
     //
 
-    printf("Init: Enter super loop\n");
+    printc("Init: Enter super loop\n");
 
     while (1)
     {
@@ -333,6 +373,9 @@ void app_main(void)
         if (result < 0)
             INC_SAT_U16(cnts_u16[CNT_RUN_ERR]);
 
+        result = tmphm_run(TMPHM_INSTANCE_1);
+        if (result < 0)
+            INC_SAT_U16(cnts_u16[CNT_RUN_ERR]);
     }
 }
 
@@ -365,16 +408,16 @@ static int32_t cmd_main_status(int32_t argc, const char** argv)
     }
 
     if (bad_arg) {
-        printf("Invalid arguments\n");
+        printc("Invalid arguments\n");
         return MOD_ERR_ARG;
     }
 
-    printf("Super loop samples=%lu min=%lu ms, max=%lu ms, avg=%lu us\n",
+    printc("Super loop samples=%lu min=%lu ms, max=%lu ms, avg=%lu us\n",
            stat_loop_dur.samples, stat_loop_dur.min, stat_loop_dur.max,
            stat_dur_avg_us(&stat_loop_dur));
 
     if (clear) {
-        printf("Clearing loop stat\n");
+        printc("Clearing loop stat\n");
         stat_dur_init(&stat_loop_dur);
     }
     return 0;

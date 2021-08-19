@@ -71,6 +71,7 @@
  */
 int32_t MYMOD_get_def_cfg(struct MYMOD_cfg* cfg)
 {
+    return 0;
 }
 
 /*
@@ -126,6 +127,7 @@ int32_t MYMOD_run(void)
  */
 int32_t MYMOD_get_def_cfg(MYMOD_instance_id instance_id, struct MYMOD_cfg* cfg)
 {
+    return 0;
 }
 
 /*

@@ -44,6 +44,7 @@
 #include <stdlib.h>
 
 #include "cmd.h"
+#include "console.h"
 #include "gps_gtu7.h"
 #include "log.h"
 #include "module.h"
@@ -251,11 +252,11 @@ static int32_t cmd_gps_status(int32_t argc, const char** argv)
 {
     int32_t idx;
 
-    printf("Reported satellites:\n");
+    printc("Reported satellites:\n");
     for (idx = 0; idx < MAX_SATS; idx++) {
         struct sat_data* sat_data = &gps_state.sat_data[idx];
         if (sat_data->present) {
-            printf("  %c: azimuth=%3d deg elevation=%2d deg snr=%2d dB "
+            printc("  %c: azimuth=%3d deg elevation=%2d deg snr=%2d dB "
                    "data-age=%lu ms\n",
                    sat_idx_to_char(idx),
                    sat_data->azimuth,
@@ -264,7 +265,7 @@ static int32_t cmd_gps_status(int32_t argc, const char** argv)
                    tmr_get_ms() - sat_data->last_update_ms);
         }
     }
-    printf("gps map: %s\n", gps_state.disp_map_on ? "on" : "off");
+    printc("gps map: %s\n", gps_state.disp_map_on ? "on" : "off");
     return 0;
 }
 
@@ -294,7 +295,7 @@ static int32_t cmd_gps_map(int32_t argc, const char** argv)
     } else if (strcasecmp(op, "clear") == 0) {
         gps_state.disp_map_clear_history = false;
     } else {
-        printf("Invalid operation '%s'\n", op);
+        printc("Invalid operation '%s'\n", op);
         return MOD_ERR_ARG;
     }
     return 0;
@@ -464,18 +465,18 @@ static void display_map(void)
         }
     }
 
-    printf("\x1B[?25l");
+    printc("\x1B[?25l");
     if (gps_state.disp_map_clear_screen) {
         gps_state.disp_map_clear_screen = false;
-        printf("\x1B[2J");
+        printc("\x1B[2J");
     }
-    printf("\x1B[1;1H");
+    printc("\x1B[1;1H");
     for (idy = DISP_ROWS-1; idy >= 0; idy--) {
         for (idx = 0; idx < DISP_COLS; idx++)
-            printf("%c ", map[idx][idy]);
-        printf("\n");
+            printc("%c ", map[idx][idy]);
+        printc("\n");
     }
-    printf("\x1B[?25h");
+    printc("\x1B[?25h");
 }
 
 /*
