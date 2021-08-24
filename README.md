@@ -1,8 +1,8 @@
-Code for YouTube course: I2C: Theory and Practice Using STM32
-============================================================
+Code for YouTube course: I2C: Theory and Practice on Bare Metal STM32
+=====================================================================
 
-This repo contains the code for my YouTube course **I2C: Theory and Practice Using
-STM32**.  This course consists of around four video lessons. The YouTube URL is:
+This repo contains the code for my YouTube course **I2C: Theory and Practice on
+Base Metal STM32**.  This course consists of five videos. The YouTube URL is:
 
 https://www.youtube.com/playlist?list=PL4cGeWgaBTe1I_AfY4wk0SbIvh5tKWQME
 
